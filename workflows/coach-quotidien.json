@@ -1,0 +1,353 @@
+{
+  "name": "coach-quotidien",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f63cb638-1825-4c4d-8e08-3392f2425f21",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst fichiers = items.filter(i => i.json.content !== undefined);\nconst commits = items.filter(i => i.json.commit !== undefined);\n\nconst backlog = Buffer.from(fichiers[0].json.content.replace(/\\n/g, ''), 'base64').toString('utf-8');\nconst projet2 = Buffer.from(fichiers[1].json.content.replace(/\\n/g, ''), 'base64').toString('utf-8');\n\nconst commitLines = commits.map(c =>\n  `- ${c.json.commit.message} (${c.json.commit.author.date.substring(0,10)}) [${c.json.html_url.includes('coach-linkedin') ? 'P2' : 'P1'}]`\n).join('\\n') || 'Aucun commit';\n\nconst today = new Date().toLocaleDateString('fr-FR', {\n  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'\n});\n\nconst prompt = `Tu es un coach technique et business pour Nicolas, 36 ans, analyste-développeur IBM i en CDI, qui apprend les agents IA le soir (3-4h max).\n\nAujourd'hui : ${today}\n\n---\n\nPROJET 1 — CALCPATRIMOINE\nBacklog :\n${backlog.substring(0, 3000)}\n\n---\n\nPROJET 2 — COACH LINKEDIN PATRIMOINE\nÉtat du projet :\n${projet2}\n\n---\n\nCOMMITS RÉCENTS (P1 = CalcPatrimoine, P2 = Coach LinkedIn) :\n${commitLines}\n\n---\n\nGénère un brief quotidien en HTML compatible Gmail. Règles strictes :\n- Pas de backticks ni de markdown, uniquement du HTML\n- Pas de balises style avec background sombre\n- Pas de pre, code, ou block de code\n- Les noms techniques entre strong uniquement\n- Couleurs : texte noir sur fond blanc uniquement\n- Les estimations de temps entre crochets en gras\n\nStructure :\n\n<h2>1 — CalcPatrimoine</h2>\nÉtat du jour (2 phrases basées sur les commits P1)\nFocus du jour (1 direction)\nTo-do (2h max)\n\n<h2>2 — Coach LinkedIn</h2>\nÉtat du jour (2 phrases basées sur les commits P2 et le statut)\nFocus du jour (1 direction)\nTo-do (2h max)\n\n<h2>Motivation</h2>\n1 phrase sèche qui couvre les deux projets.\n\nTotal to-do : 4h max. Ton : direct, sans bullshit.`;\n\nreturn [{ json: { prompt, today } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -192
+      ],
+      "id": "63cf130b-10a6-4e10-93b2-7388bdbb25d2",
+      "name": "Assembler contexte"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first();\nconst htmlContent = response.json.content[0].text;\nconst today = new Date().toLocaleDateString('fr-FR', {\n  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'\n});\n\nreturn [{ json: { htmlContent, today } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        256
+      ],
+      "id": "c3ef5b3a-490b-435b-a0a4-a68c86346e19",
+      "name": "Extraire reponse"
+    },
+    {
+      "parameters": {
+        "sendTo": "nba67000@gmail.com",
+        "subject": "=={{ $json.today }} — Brief coach IA",
+        "message": "=={{ $json.htmlContent }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        432,
+        256
+      ],
+      "id": "d94032b2-77be-42a6-be14-a9da2dda8b56",
+      "name": "Send a message",
+      "webhookId": "f1ebd24d-db30-45cc-b039-ed2aa28a00ae",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RGEKT9Bed0qLcwO2",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-6"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=={{ $json.prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 2500
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "3516c40f-29d0-4a4a-ac0c-463360a4105d",
+      "name": "Message a model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "BPJsxofslZ6ey9Nq",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        656,
+        -224
+      ],
+      "id": "920cedb7-2a1a-4f67-be7b-5884ca6d8b82",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "url": "https://github.com/nba67000/calculpatrimoine/commits?per_page=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        0
+      ],
+      "id": "418de1d1-e6a9-4a0d-be03-16239b144a6f",
+      "name": "Github Commit CalculPatrimoine"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/repos/nba67000/calculpatrimoine/contents/BACKLOG.md",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        -208
+      ],
+      "id": "5c371ac7-eb46-4f52-a7e6-d1016ecb8322",
+      "name": "GitHub Backlog CalculPatrimoine"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/repos/nba67000/coach-linkedin/contents/PROJET_STATUS.md",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        -400
+      ],
+      "id": "4aa20760-64f4-40f6-88e9-b0558219934a",
+      "name": "Github Backlog Coach Linkedin"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/repos/nba67000/coach-linkedin/commits?per_page=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        -592
+      ],
+      "id": "0cc1a39d-e760-448c-8587-c0866eb17976",
+      "name": "Github commit Coach Linkedin"
+    }
+  ],
+  "pinData": {
+    "Schedule Trigger": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Github Commit CalculPatrimoine",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Backlog CalculPatrimoine",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Github Backlog Coach Linkedin",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Github commit Coach Linkedin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assembler contexte": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire reponse": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Extraire reponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Assembler contexte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Github Commit CalculPatrimoine": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "GitHub Backlog CalculPatrimoine": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Github Backlog Coach Linkedin": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Github commit Coach Linkedin": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "56661496-bd98-4b98-91fd-871f4e1e0850",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1fc261297231a0d75162aaa94a0f254aa20a48c3d722c4702520408a27bc410"
+  },
+  "id": "dm7mDBwcGC0iTHkq",
+  "tags": []
+}
